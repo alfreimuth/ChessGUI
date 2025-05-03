@@ -1,4 +1,7 @@
 
+/* This is a side project that I wanted to do, as to learn visual c++ better
+	Things will be all over the place but hopefully eventually more organized,*/
+
 // Taking the fun out of functional
 
 #include "Main.h"
@@ -17,6 +20,10 @@ std::string filepath = "C:\\Temp\\ChessFen.txt";
 // Stored instance handle for Win32 API calls
 HINSTANCE hInst;
 
+bool isDragging = false; //If user is dragging
+
+UINT pieceData;
+
 // Forward declaration of functions
 LRESULT CALLBACK WndProc(
 	_In_ HWND hWnd,
@@ -25,12 +32,24 @@ LRESULT CALLBACK WndProc(
 	_In_ LPARAM lParam
 );
 
-// Track selected cell
-int selectedRow = -1;
-int selectedCol = -1;
+
+int selectedRow = -1; // selected row
+int selectedCol = -1; // selected column
+int colN = -1; // new column
+int rowN = -1; // new row
+int colF = -1; // old column
+int rowF = -1; // old row
+
 
 // Board state
-int boardState[BOARD_SIZE][BOARD_SIZE] = { 0 };
+UINT boardState[BOARD_SIZE][BOARD_SIZE] = { 0 };
+
+int mouseXStart;
+int mouseYStart;
+int mouseXEnd;
+int mouseYEnd;
+
+std::vector<std::pair<int, int>> moves;
 
 void RedirectIOToConsole()
 {
@@ -116,6 +135,8 @@ int WINAPI WinMain(
 		NULL // Pointer to window data
 	);
 
+
+
 	if (!hWnd)
 	{
 		MessageBox(NULL,
@@ -132,6 +153,8 @@ int WINAPI WinMain(
 		nCmdShow // Fourth parameter from WinMain
 	);
 	UpdateWindow(hWnd);
+
+	SetWindowPos(GetConsoleWindow(), HWND_TOP, 1, 1, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 
 	// Message loop
 	// Listens for messages from Windows
@@ -156,11 +179,10 @@ LRESULT CALLBACK WndProc(
 	_In_ LPARAM lParam
 )
 {
-	
 	static HBITMAP hSpritesheet = NULL; // Handle to spritesheet
 
 	PAINTSTRUCT ps;
-	HDC hdc;
+	HDC hdc = nullptr;
 	TCHAR greeting[] = _T("Awesome Chess");
 
 	switch (message)
@@ -174,7 +196,7 @@ LRESULT CALLBACK WndProc(
 			MessageBox(hWnd, L"File not found or inaccessiable!", L"Error", MB_OK | MB_ICONERROR);
 			PostQuitMessage(0);
 		}
-		else
+		else if (file != nullptr)
 		{
 			fclose(file);
 		}
@@ -220,50 +242,148 @@ LRESULT CALLBACK WndProc(
 			//MessageBox(hWnd, L"Button clicked!", L"Notification", MB_OK | MB_ICONINFORMATION);
 			
 
-			std::string line;
+			/*std::string line;
 			std::ifstream ifs(filepath);
 			while (getline(ifs, line))
 			{
 				std::cout << line << "\n";
 				ParseFEN(line);
 			}
-			ifs.close();
+			ifs.close();*/
 
-			InvalidateRect(hWnd, NULL, TRUE); // Force a repaint
+			selectedRow = -1;
+			rowF = -1;
+			rowN = -1;
+
+			std::string fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+			ParseFEN(fen);
+
+			RECT boardRect = { 300, 50, 300 + BOARD_SIZE * SQUARE_SIZE, 50 + BOARD_SIZE * SQUARE_SIZE };
+
+			InvalidateRect(hWnd, &boardRect, TRUE); // Force a repaint
+			 
+			moves.clear(); // Clear moves
 
 			break;
 		}
+		
 		break;
 	}
 
 	case WM_LBUTTONDOWN: 
 	{
+		rowN= -1;
+
 		// Get mouse position
-		int xPos = LOWORD(lParam);
-		int yPos = HIWORD(lParam);
+		mouseXStart = LOWORD(lParam);
+		mouseYStart = HIWORD(lParam);
 
 		// Calculate the clicked row and column
 		const int boardStartX = 300;
 		const int boardStartY = 50;
 
-
-		if (xPos >= boardStartX && yPos >= boardStartY)
+		if (mouseXStart >= boardStartX && mouseYStart >= boardStartY)
 		{
-			int col = (xPos - boardStartX) / SQUARE_SIZE;
-			int row = (yPos - boardStartY ) / SQUARE_SIZE;
+			int col = (mouseXStart - boardStartX) / SQUARE_SIZE;
+			int row = (mouseYStart - boardStartY ) / SQUARE_SIZE;
 
 			if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE)
 			{
-				selectedRow = BOARD_SIZE -row;
-				selectedCol = col;
+				if (selectedRow == BOARD_SIZE - row && selectedCol == col)
+				{
+					// Same square clicked
+					selectedRow = -1;
+					selectedCol = -1;
+					rowN = -1;
+					colN = -1;
+					isDragging = false;
+					pieceData = 0;
+					moves.clear(); // Clear moves
 
-				// Force a repaint to update the board
-				InvalidateRect(hWnd, NULL, TRUE);
-				
+				} else 
+				{
+					SetCapture(hWnd); // Always follow mouse input and location even if on different window
+					isDragging = true; // Start dragging
 
-				std::cout << "Selected cell " << static_cast<char>('A' + col) << selectedRow << " has a value of " << boardState[row][col] << std::endl;
+					std::cout << "Drag started at: " << mouseXStart << ", " << mouseYStart << " (" << static_cast<char>('A' + col) << BOARD_SIZE - row << ")" << std::endl;
+					selectedRow = BOARD_SIZE - row;
+					selectedCol = col;
+
+					pieceData = boardState[row][col];
+
+					moves = GetValidMoves(boardState[row][col], row, col);
+					
+				}
+
+					std::cout << "Selected cell " << static_cast<char>('A' + col) << selectedRow << " has a value of " << boardState[row][col] << std::endl;
+
+					// Force a repaint to update the board
+					RECT boardRect = { 300, 50, 300 + BOARD_SIZE * SQUARE_SIZE, 50 + BOARD_SIZE * SQUARE_SIZE };
+					InvalidateRect(hWnd, &boardRect, FALSE); // Force a repaint	
 			}
 		}
+		
+		break;
+	}
+
+	case WM_LBUTTONUP:
+	{
+		if (isDragging) // Dont like calling this dragging, thinking of better names
+		{
+			if (pieceData == 0)
+			{
+				std::cout << "No piece selected!" << std::endl;
+				break;
+			}
+
+			ReleaseCapture(); // Stop following mouse 
+
+			isDragging = false; 
+
+			// first
+			int colA = (mouseXStart - 300) / SQUARE_SIZE;
+			int rowA = (mouseYStart - 50) / SQUARE_SIZE;
+
+			// new
+			int mouseXEnd = LOWORD(lParam);
+			int mouseYEnd = HIWORD(lParam);
+			int colB = (mouseXEnd - 300) / SQUARE_SIZE;
+			int rowB = (mouseYEnd - 50) / SQUARE_SIZE;
+
+			if (count(moves.begin(), moves.end(), std::make_pair(rowB, colB)) > 0)
+			{
+				MovePiece(hWnd, rowA, rowB, colA, colB, pieceData, lParam);
+				RefreshPossibleMoves(hWnd);
+				moves.clear(); // Clear moves
+			}
+			else
+			{
+				//selectedRow = -1;
+				//selectedCol = -1;
+				//rowN = -1;
+				//colN = -1;
+				//isDragging = false;
+				//pieceData = 0;
+				//moves.clear(); // Clear moves
+			}
+			
+		}
+		
+		break;
+	}
+
+	case WM_MOUSEMOVE: 
+	{
+		isDragging = true;
+		/*if(isDragging)
+		{
+			int xPos = LOWORD(lParam);
+			int yPos = HIWORD(lParam);
+
+			std::cout << "Dragged from: " << mouseXStart << ", " << mouseYStart << " to: " << xPos << ", " << yPos << std::endl;
+
+			break;
+		}*/
 		break;
 	}
 	
@@ -287,73 +407,28 @@ LRESULT CALLBACK WndProc(
 
 	case WM_PAINT: // Paint main window
 	{
+		
 		hdc = BeginPaint(hWnd, &ps);
 
-		HDC hdcMem = CreateCompatibleDC(hdc); // Memory device context
-		SelectObject(hdcMem, hSpritesheet);
-
-		
+		// Double buffer shenanigans
+		HDC hdcBuffer = CreateCompatibleDC(hdc);
+		HBITMAP hBitmap = CreateCompatibleBitmap(hdc, SCREEN_X, SCREEN_Y);
+		HBITMAP hOldBitMap = (HBITMAP)SelectObject(hdcBuffer, hBitmap);
 
 		// Background color
 		HBRUSH bgBrush = CreateSolidBrush(backgroundColor);
-		FillRect(hdc, &ps.rcPaint, bgBrush);
+		FillRect(hdcBuffer, &ps.rcPaint, bgBrush);
 		DeleteObject(bgBrush);
 
-		// Draw the board
-		const int boardSize = BOARD_SIZE;
-		const int squareSize = SQUARE_SIZE;
-		const int boardStartX = 300;
-		const int boardStartY = 50;
+		// Board essentials
+		HDC hdcMem = CreateCompatibleDC(hdc); // Memory device context
+		SelectObject(hdcMem, hSpritesheet);
+		
+		
+		
 
-		// Draw board
-		for (UINT8 row = 0; row < boardSize; ++row)
-		{
-			for (UINT8 col = 0; col < boardSize; ++col)
-			{
-				int x = boardStartX + col * squareSize;
-				int y = boardStartY + row * squareSize;
-
-				// Check if this is the selected cell
-				HBRUSH brush;
-				if (BOARD_SIZE - row == selectedRow && col == selectedCol)
-				{
-					brush = CreateSolidBrush(RGB(255, 0, 0)); // Highlight color (red)
-				}
-				else
-				{
-					brush = (row + col) % 2 == 0
-						? CreateSolidBrush(boardColor1)
-						: CreateSolidBrush(boardColor2);
-				}
-
-				RECT rect = { x, y, x + squareSize, y + squareSize };
-				FillRect(hdc, &rect, brush);
-				DeleteObject(brush);
-
-				// Draw circle if piece
-				if (boardState[row][col] != 0)
-				{
-					HBRUSH pieceBrush = CreateSolidBrush(RGB(0, 0, 255));
-					SelectObject(hdc, pieceBrush);
-
-					Ellipse(
-						hdc,
-						x + squareSize / 4, // Left
-						y + squareSize / 4, // Top
-						x + 3 * squareSize / 4, // Right
-						y + 3 * squareSize / 4 // Bottom
-					);
-					DeleteObject(brush);
-
-					PlacePiece(hdc, hdcMem, boardState[row][col], 7-row, col);
-
-					
-				}
-
-				
-			}
-		}
-	
+		DrawBoard(hdcBuffer, hdcMem);
+		DeleteDC(hdcMem);
 
 		//// Lay out application
 		//TextOut(hdc, // Handle to device context
@@ -361,19 +436,32 @@ LRESULT CALLBACK WndProc(
 		//	greeting, static_cast<int>(_tcslen(greeting)));
 		// End app-specific layout
 
-		DeleteDC(hdcMem);
+		
+
+		// Buffer to screen
+		BitBlt(hdc, 0, 0, SCREEN_X, SCREEN_Y, hdcBuffer, 0, 0, SRCCOPY);
+
+		SelectObject(hdcBuffer, hOldBitMap); 
+		DeleteObject(hBitmap);
+		DeleteDC(hdcBuffer);
+
 		EndPaint(hWnd, &ps);
+		break;
 	}
-	break;
+	
 
 	case WM_DESTROY: // Post quit message and return
+	{
 		DeleteObject(hSpritesheet);
 		PostQuitMessage(0);
 		break;
+	}
 
 	default:
+	{
 		return DefWindowProc(hWnd, message, wParam, lParam);
-		break;
+	}
+
 	}
 }
 
