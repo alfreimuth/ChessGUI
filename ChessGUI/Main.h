@@ -33,14 +33,24 @@ extern COLORREF backgroundColor;
 extern HWND hSlider;
 extern int selectedRow; // selected row
 extern int selectedCol; // selected column
-extern int colN; // new column
-extern int rowN; // new row
+extern int colB; // new column
+extern int rowB; // new row
 extern int colF; // old column
 extern int rowF; // old row
 extern std::vector<std::pair<int, int>> moves;
 
 extern int mouseXStart;
 extern int mouseYStart;
+
+extern bool whiteKingMoved;
+extern bool blackKingMoved;
+extern bool whiteRookMoved[2];
+extern bool blackRookMoved[2];
+extern std::vector<std::pair<std::pair<int, int>, std::pair<int, int>>> gameHistory; // <from> <to>
+extern UINT lastPieceData;
+extern char algebraicPieceChar;
+extern HWND hTextbox;
+extern wchar_t buffer[1024];
 
 
 
@@ -54,5 +64,6 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col);
 void RefreshRect(HWND hWnd, int row, int col);
 void RefreshPossibleMoves(HWND hWnd);
 void MovePiece(HWND hWnd, int rowA, int rowB, int colA, int colB, UINT pieceData, LPARAM lParam);
+void UpdateMoveHistory();
 
 #endif // MAIN_H

@@ -142,11 +142,11 @@ void DrawBoard(HDC hdcBuffer, HDC hdcMem)
 
 			if (BOARD_SIZE - row == selectedRow && col == selectedCol)
 			{
-				brush = CreateSolidBrush(RGB(255, 0, 0)); // Highlight color (red)
+				brush = CreateSolidBrush(RGB(50, 200, 0)); // Highlight color (red)
 			}
-			else if (row == rowN && col == colN)
+			else if (row == rowB && col == colB)
 			{
-				brush = CreateSolidBrush(RGB(100, 0, 0));
+				brush = CreateSolidBrush(RGB(10, 100, 50));
 			}
 
 			RECT rect = { x, y, x + SQUARE_SIZE, y + SQUARE_SIZE };
@@ -204,6 +204,51 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 				{-1, -1} // Up-Left
 			};
 
+			algebraicPieceChar = 'K';
+
+			if (!(pieceData & 0b00001000))
+			{
+				if (!whiteKingMoved && !whiteRookMoved[1] 
+					 && boardState[row][col + 1] == 0 && boardState[row][col + 2] == 0 
+					// && !IsSquareUnderAttack(row, col, WHITE) &&
+					//!IsSquareUnderAttack(row, col + 1, WHITE) &&
+					//!IsSquareUnderAttack(row, col + 2, WHITE)
+					)
+				{
+					moves.emplace_back(row, col + 2); // Castling move
+				}
+				if (!whiteKingMoved && !whiteRookMoved[0]
+					&& boardState[row][col - 1] == 0 && boardState[row][col - 2] == 0 && boardState[row][col - 3] == 0
+					// && !IsSquareUnderAttack(row, col, WHITE) &&
+					//!IsSquareUnderAttack(row, col - 1, WHITE) &&
+					//!IsSquareUnderAttack(row, col - 2, WHITE)
+					)
+				{
+					moves.emplace_back(row, col - 2); // Castling move
+				}
+			}
+			else if (pieceData & 0b00001000)
+			{
+				if (!blackKingMoved && !blackRookMoved[1]
+					&& boardState[row][col + 1] == 0 && boardState[row][col + 2] == 0
+					// && !IsSquareUnderAttack(row, col, WHITE) &&
+					//!IsSquareUnderAttack(row, col + 1, WHITE) &&
+					//!IsSquareUnderAttack(row, col + 2, WHITE)
+					)
+				{
+					moves.emplace_back(row, col + 2); // Castling move
+				}
+				if (!blackKingMoved && !blackRookMoved[0]
+					&& boardState[row][col - 1] == 0 && boardState[row][col - 2] == 0 && boardState[row][col - 3] == 0
+					// && !IsSquareUnderAttack(row, col, WHITE) &&
+					//!IsSquareUnderAttack(row, col - 1, WHITE) &&
+					//!IsSquareUnderAttack(row, col - 2, WHITE)
+					)
+				{
+					moves.emplace_back(row, col - 2); // Castling move
+				}
+			}
+
 			for (const auto& direction : directions)
 			{
 				int rowOffset = direction.first;
@@ -248,6 +293,8 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 				{-1, -1} // Up-Left
 			};
 
+			algebraicPieceChar = 'Q';
+
 			for (const auto& direction : directions)
 			{
 				int rowOffset = direction.first;
@@ -288,6 +335,8 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 				{-1, -1} // Up-Left
 			};
 
+			algebraicPieceChar = 'B';
+
 			for (const auto& direction : directions)
 			{
 				int rowOffset = direction.first;
@@ -327,6 +376,8 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 					{1, 2}, {1, -2},
 					{-1, 2}, {-1, -2}
 			};
+
+			algebraicPieceChar = 'N';
 
 			for (const auto& direction : directions)
 			{
@@ -369,6 +420,8 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 				{0, -1}  // Left
 			};
 
+			algebraicPieceChar = 'R';
+
 			for (const auto& direction : directions)
 			{
 				int rowOffset = direction.first;
@@ -409,6 +462,8 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 					{2, 0}
 			};
 
+			algebraicPieceChar = NULL;
+
 			for (const auto& direction : directions)
 			{
 
@@ -428,7 +483,7 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 					}
 					else
 					{
-						if (boardState[row + rowOffset][col] != 0) // Check if empty
+						if (((boardState[row + rowOffset][col] != 0) || (boardState[row + (rowOffset / 2)][col] != 0))) // Check if empty
 						{
 							continue; // Can't move if not empty
 						}
@@ -458,6 +513,7 @@ std::vector<std::pair<int, int>> GetValidMoves(int pieceData, int row, int col)
 					}
 				}
 			}
+
 			break;
 		}
 	}
@@ -488,8 +544,6 @@ void RefreshPossibleMoves(HWND hWnd) { // doesnt have a use just learned.
 
 void MovePiece(HWND hWnd, int rowA, int rowB, int colA, int colB, UINT pieceData, LPARAM lParam)
 {
-	
-	
 
 		RECT originalRect = {
 		300 + colA * SQUARE_SIZE,
@@ -511,9 +565,109 @@ void MovePiece(HWND hWnd, int rowA, int rowB, int colA, int colB, UINT pieceData
 		//std::cout << "Drag stopped at: " << mouseXEnd << ", " << mouseYEnd << " (" << static_cast<char>('A' + colB) << BOARD_SIZE - rowB << ")" << std::endl;
 
 		boardState[rowA][colA] = 0;
+
 		if (rowB >= 0 && rowB < BOARD_SIZE && colB >= 0 && colB < BOARD_SIZE)
 		{
 			boardState[rowB][colB] = pieceData; // Move piece
+			//gameHistory.emplace_back(std::make_pair(rowA, colA), std::make_pair(rowB, colB)); // Store move history
+			gameHistory.push_back({ {rowA, colA}, {rowB, colB} }); // Store move history
+			UpdateMoveHistory();
+			lastPieceData = pieceData;
+		}
+
+		if ((pieceData & 0b00000111) == KING)
+		{
+			if (pieceData & 0b00001000) // Black
+			{
+				if (colA == 4 && colB == 6 && !blackKingMoved && !blackRookMoved[1]) // Short castling
+				{
+					boardState[0][5] = boardState[0][7]; // Move rook
+					boardState[0][7] = 0; // Clear old rook position
+					RefreshRect(hWnd, 0, 7);
+				}
+				else if (colA == 4 && colB == 2 && !blackKingMoved && !blackRookMoved[0]) // Long castling
+				{
+					boardState[0][5] = boardState[0][0]; // Move rook
+					boardState[0][7] = 0; // Clear old rook position
+					RefreshRect(hWnd, 0, 7);
+				}
+				blackKingMoved = true;
+			}
+			else
+			{
+				if (colA == 4 && colB == 6 && !whiteKingMoved && !whiteRookMoved[1]) // Short castling
+				{
+					boardState[7][5] = boardState[7][7]; // Move rook
+					boardState[7][7] = 0; // Clear old rook position
+					RefreshRect(hWnd, 7, 7);
+				}
+				else if (colA == 4 && colB == 2 && !whiteKingMoved && !whiteRookMoved[0]) // Long castling
+				{
+					boardState[7][3] = boardState[7][0]; // Move rook
+					boardState[7][0] = 0; // Clear old rook position
+					RefreshRect(hWnd, 7, 0);
+				}
+				whiteKingMoved = true;
+			}
+		}
+		else if ((pieceData & 0b00000111) == ROOK)
+		{
+			if (pieceData & 0b00001000) // Black
+			{
+				if (colA == 0)
+					blackRookMoved[0] = true; 
+				else if (colA == BOARD_SIZE - 1)
+					blackRookMoved[1] = true; 
+			}
+			else
+			{
+				if (colA == 0)
+					whiteRookMoved[0] = true; 
+				else if (colA == BOARD_SIZE - 1)
+					whiteRookMoved[1] = true; 
+			}
+		}
+		else if ((pieceData & 0b00000111) == PAWN)
+		{
+				if ((rowB == 0 || rowB == BOARD_SIZE - 1))
+				{
+					// Promote
+					std::cout << "Promotion!!!" << std::endl;
+				}
+
+				std::cout << (static_cast<char>('a' + gameHistory.end()[-1].first.first) + gameHistory.end()[-1].first.second
+					+ static_cast<char>('a' + gameHistory.end()[-1].second.first) + gameHistory.end()[-1].second.second) << std::endl;
+				
+		}
+		else  
+		{
+				std::cout << algebraicPieceChar << static_cast<char>('a' + gameHistory.end()[-1].first.first) << gameHistory.end()[-1].first.second
+					<< static_cast<char>('a' + gameHistory.end()[-1].second.first) << gameHistory.end()[-1].second.second << std::endl;
 		}
 	
+}
+
+void UpdateMoveHistory()
+{
+	wchar_t buffer[4096];
+	GetWindowText(hTextbox, buffer, 4096);
+
+	auto LastMove = gameHistory.back();
+	int rowA = LastMove.first.first;
+	int colA = LastMove.first.second;
+	int rowB = LastMove.second.first;
+	int colB = LastMove.second.second;
+
+	std::wstring move = L"";
+	move += static_cast<wchar_t>('a' + colA);
+	move += std::to_wstring(BOARD_SIZE - rowA);
+	
+	move += static_cast<wchar_t>('a' + colB);
+	move += std::to_wstring(BOARD_SIZE - rowB);
+
+	move += L"\r\n";
+
+	std::wstring updatedMoveList = buffer + move;
+
+	SetWindowText(hTextbox, updatedMoveList.c_str());
 }

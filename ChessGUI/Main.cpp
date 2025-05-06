@@ -8,6 +8,8 @@
 
 #pragma comment(lib, "Msimg32.lib")
 
+// DISGUSTING global variables - remove later
+
 // Main window class name
 static TCHAR szWindowClass[] = _T("DesktopApp");
 
@@ -21,8 +23,18 @@ std::string filepath = "C:\\Temp\\ChessFen.txt";
 HINSTANCE hInst;
 
 bool isDragging = false; //If user is dragging
+bool isLClicked = false;
+
+bool whiteKingMoved = false, blackKingMoved = false;
+bool whiteRookMoved[2] = { false, false };
+bool blackRookMoved[2] = { false, false };
+
+std::vector<std::pair<std::pair<int, int>, std::pair<int, int>>> gameHistory; // from - to
+UINT lastPieceData;
 
 UINT pieceData;
+
+HWND hTextbox;
 
 // Forward declaration of functions
 LRESULT CALLBACK WndProc(
@@ -35,10 +47,12 @@ LRESULT CALLBACK WndProc(
 
 int selectedRow = -1; // selected row
 int selectedCol = -1; // selected column
-int colN = -1; // new column
-int rowN = -1; // new row
+int colB = -1; // new column
+int rowB = -1; // new row
 int colF = -1; // old column
 int rowF = -1; // old row
+
+char algebraicPieceChar;
 
 
 // Board state
@@ -215,11 +229,33 @@ LRESULT CALLBACK WndProc(
 			);
 			PostQuitMessage(0);
 		}
-		 
 
 		// Starting position
 		std::string fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
 		ParseFEN(fen);
+
+		hTextbox = CreateWindowEx(
+			WS_EX_CLIENTEDGE,
+			L"EDIT",
+			NULL,
+			WS_CHILD | WS_VISIBLE |
+			ES_MULTILINE | ES_AUTOVSCROLL,
+			SCREEN_X - 400,
+			50,
+			350,
+			SCREEN_Y - 150,
+			hWnd,
+			NULL,
+			hInst,
+			NULL
+		);
+
+		if (hTextbox == NULL)
+		{
+			MessageBox(hWnd, L"Textbox creation failed!", L"Error", MB_OK | MB_ICONERROR);
+		}
+
+		SetWindowText(hTextbox, std::wstring(fen.begin(), fen.end()).c_str());
 
     
 		// Objects added
@@ -251,11 +287,17 @@ LRESULT CALLBACK WndProc(
 			}
 			ifs.close();*/
 
+			wchar_t buffer[1024];
+			GetWindowText(hTextbox, buffer, 1024);
+
+			std::wcout << L"Textbox content: " << buffer << std::endl;
+
 			selectedRow = -1;
 			rowF = -1;
-			rowN = -1;
+			rowB = -1;
 
 			std::string fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+			SetWindowText(hTextbox, std::wstring(fen.begin(), fen.end()).c_str()); // this is the dumbest, goofiest transition
 			ParseFEN(fen);
 
 			RECT boardRect = { 300, 50, 300 + BOARD_SIZE * SQUARE_SIZE, 50 + BOARD_SIZE * SQUARE_SIZE };
@@ -272,7 +314,7 @@ LRESULT CALLBACK WndProc(
 
 	case WM_LBUTTONDOWN: 
 	{
-		rowN= -1;
+		rowB = -1;
 
 		// Get mouse position
 		mouseXStart = LOWORD(lParam);
@@ -284,6 +326,8 @@ LRESULT CALLBACK WndProc(
 
 		if (mouseXStart >= boardStartX && mouseYStart >= boardStartY)
 		{
+			isLClicked = true;
+
 			int col = (mouseXStart - boardStartX) / SQUARE_SIZE;
 			int row = (mouseYStart - boardStartY ) / SQUARE_SIZE;
 
@@ -294,8 +338,8 @@ LRESULT CALLBACK WndProc(
 					// Same square clicked
 					selectedRow = -1;
 					selectedCol = -1;
-					rowN = -1;
-					colN = -1;
+					rowB = -1;
+					colB = -1;
 					isDragging = false;
 					pieceData = 0;
 					moves.clear(); // Clear moves
@@ -305,7 +349,7 @@ LRESULT CALLBACK WndProc(
 					SetCapture(hWnd); // Always follow mouse input and location even if on different window
 					isDragging = true; // Start dragging
 
-					std::cout << "Drag started at: " << mouseXStart << ", " << mouseYStart << " (" << static_cast<char>('A' + col) << BOARD_SIZE - row << ")" << std::endl;
+					std::cout << "Drag started at: " << mouseXStart << ", " << mouseYStart << " (" << static_cast<char>('a' + col) << BOARD_SIZE - row << ")" << std::endl;
 					selectedRow = BOARD_SIZE - row;
 					selectedCol = col;
 
@@ -315,7 +359,7 @@ LRESULT CALLBACK WndProc(
 					
 				}
 
-					std::cout << "Selected cell " << static_cast<char>('A' + col) << selectedRow << " has a value of " << boardState[row][col] << std::endl;
+					std::cout << "Selected cell " << static_cast<char>('a' + col) << selectedRow << " has a value of " << boardState[row][col] << std::endl;
 
 					// Force a repaint to update the board
 					RECT boardRect = { 300, 50, 300 + BOARD_SIZE * SQUARE_SIZE, 50 + BOARD_SIZE * SQUARE_SIZE };
@@ -328,6 +372,8 @@ LRESULT CALLBACK WndProc(
 
 	case WM_LBUTTONUP:
 	{
+		isLClicked = false;
+
 		if (isDragging) // Dont like calling this dragging, thinking of better names
 		{
 			if (pieceData == 0)
@@ -347,8 +393,8 @@ LRESULT CALLBACK WndProc(
 			// new
 			int mouseXEnd = LOWORD(lParam);
 			int mouseYEnd = HIWORD(lParam);
-			int colB = (mouseXEnd - 300) / SQUARE_SIZE;
-			int rowB = (mouseYEnd - 50) / SQUARE_SIZE;
+			colB = (mouseXEnd - 300) / SQUARE_SIZE;
+			rowB = (mouseYEnd - 50) / SQUARE_SIZE;
 
 			if (count(moves.begin(), moves.end(), std::make_pair(rowB, colB)) > 0)
 			{
@@ -374,7 +420,7 @@ LRESULT CALLBACK WndProc(
 
 	case WM_MOUSEMOVE: 
 	{
-		isDragging = true;
+		isLClicked ? isDragging = true : isDragging = false;
 		/*if(isDragging)
 		{
 			int xPos = LOWORD(lParam);
